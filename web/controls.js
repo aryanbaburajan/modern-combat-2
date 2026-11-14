@@ -19,7 +19,7 @@ const RIGHT = 1;
 const USE = ["Action*", "Weapon*", "ClickableObject", "ClickableQTE", "ExitTurret", "GrenadeThrowback", "Melee"];
 export const DEFAULT_BINDINGS = {
   ControlLeft: { names: ["crouch"] },
-  ControlRight: { names: ["iron_sight"] },
+  ShiftLeft: { names: ["iron_sight"] },
   KeyC: { names: ["crouch"] },
   KeyR: { names: ["weapon_selector"] },
   KeyQ: { names: ["weapon_selector"], taps: 2 },
@@ -41,7 +41,7 @@ export const KEY_LABELS = {
   walk: "Alt",
   look: "the mouse",
   fire: "left mouse button",
-  aim: "right mouse button or Right Ctrl",
+  aim: "right mouse button or Left Shift",
   crouch: "Left Ctrl or C",
   reload: "R",
   switchWeapon: "Q",
@@ -172,7 +172,7 @@ export class Controls {
   }
 
   updateHint() {
-    if (this.gameplay && !this.locked) this.onHint("Click to capture the mouse — WASD move · Alt walk · mouse look · L-click fire · R-click / Right Ctrl toggle aim · Left Ctrl / C crouch · R reload · Q/wheel weapon · G grenade · E use · F melee · Esc pause");
+    if (this.gameplay && !this.locked) this.onHint("Click to capture the mouse — WASD move · Alt walk · mouse look · L-click fire · R-click / Left Shift toggle aim · Left Ctrl / C crouch · R reload · Q/wheel weapon · G grenade · E use · F melee · Esc pause");
     else if (this.cutscene) this.onHint("Space / Enter: skip");
     else this.onHint("");
   }
