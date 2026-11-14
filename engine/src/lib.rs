@@ -42,7 +42,6 @@ pub struct Emu {
     pub render_pc: u32,
     pub hidden_hud: Vec<String>,
     pub text: game::TextPatcher,
-    pub early: game::EarlyMove,
     /// Debug: function entries to log (pc, symbol).
     pub traced: Vec<(u32, String)>,
 }
@@ -66,7 +65,7 @@ impl Emu {
         let mut hle = hle::State::new(&mut mem);
         let lib = loader::load_elf(&mut mem, lib_bytes, LIB_BASE, &mut |name, is_func| hle.resolve_import(name, is_func))?;
         let cache = BlockCache::new(lib.text_start, lib.text_end);
-        let mut emu = Emu { cpu: Cpu::new(), mem, cache, lib, hle, plat, icount: 0, trace: false, probes: Vec::new(), render_pc: 1, hidden_hud: Vec::new(), text: Default::default(), early: Default::default(), traced: Vec::new() };
+        let mut emu = Emu { cpu: Cpu::new(), mem, cache, lib, hle, plat, icount: 0, trace: false, probes: Vec::new(), render_pc: 1, hidden_hud: Vec::new(), text: Default::default(), traced: Vec::new() };
         emu.hle.init_threads(&mut emu.mem);
         game::install_probes(&mut emu);
         Ok(emu)
@@ -189,16 +188,6 @@ impl Emu {
                     };
                     let msg = format!("[trace] {}({}, {}, {}, {}) from {}", t, desc(self, self.cpu.r[0]), desc(self, self.cpu.r[1]), desc(self, self.cpu.r[2]), desc(self, self.cpu.r[3]), self.symbolize(self.cpu.r[14]));
                     self.plat.log(&msg);
-                }
-            }
-            if self.early.enabled {
-                if let Some(i) = self.early.pcs.iter().position(|&p| p == pc) {
-                    if game::on_control_gate(self, i) {
-                        let lr = self.cpu.r[14];
-                        self.cpu.thumb = lr & 1 != 0;
-                        self.cpu.pc = lr & !1;
-                        continue;
-                    }
                 }
             }
             if pc == self.render_pc && !self.hidden_hud.is_empty() && game::is_hidden_control(self, self.cpu.r[0]) {

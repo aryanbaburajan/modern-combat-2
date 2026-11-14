@@ -973,7 +973,6 @@ fn android_log_print(emu: &mut Emu) -> Flow {
     let mut va = VaArgs::from_call(emu, 3);
     let s = super::fmt::format(emu, fmt_addr, &mut va);
     let msg = format!("{}/{}: {}", prio_char(prio), tag, String::from_utf8_lossy(&s).trim_end());
-    crate::game::observe_log(emu, &msg);
     emu.log(&msg);
     emu.ret(0);
     Flow::Ret
@@ -985,7 +984,6 @@ fn android_log_vprint(emu: &mut Emu) -> Flow {
     let mut va = VaArgs::from_va_list(emu.arg(3));
     let s = super::fmt::format(emu, fmt_addr, &mut va);
     let msg = format!("{}/{}: {}", prio_char(prio), tag, String::from_utf8_lossy(&s).trim_end());
-    crate::game::observe_log(emu, &msg);
     emu.log(&msg);
     emu.ret(0);
     Flow::Ret
@@ -995,7 +993,6 @@ fn android_log_write(emu: &mut Emu) -> Flow {
     let tag = emu.mem.cstr(emu.arg(1));
     let text = emu.mem.cstr(emu.arg(2));
     let msg = format!("{}/{}: {}", prio_char(prio), tag, text.trim_end());
-    crate::game::observe_log(emu, &msg);
     emu.log(&msg);
     emu.ret(0);
     Flow::Ret

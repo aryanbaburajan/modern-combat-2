@@ -19,7 +19,7 @@ const RIGHT = 1;
 const USE = ["Action*", "Weapon*", "ClickableObject", "ClickableQTE", "ExitTurret", "GrenadeThrowback", "Melee"];
 export const DEFAULT_BINDINGS = {
   ControlLeft: { names: ["crouch"] },
-  ControlRight: { names: ["crouch"] },
+  ControlRight: { names: ["iron_sight"] },
   KeyC: { names: ["crouch"] },
   KeyR: { names: ["weapon_selector"] },
   KeyQ: { names: ["weapon_selector"], taps: 2 },
@@ -41,8 +41,8 @@ export const KEY_LABELS = {
   walk: "Alt",
   look: "the mouse",
   fire: "left mouse button",
-  aim: "right mouse button",
-  crouch: "Ctrl",
+  aim: "right mouse button or Right Ctrl",
+  crouch: "Left Ctrl or C",
   reload: "R",
   switchWeapon: "Q",
   grenade: "G",
@@ -84,10 +84,6 @@ export class Controls {
     this.paused = false;
     this.loadout = false;
     this.cameraSeenAt = -1e9;
-    this.ads = false; // game reports aiming down the sights
-    this.adsHeld = false; // right mouse button held
-    this.adsEnterAt = -1e9;
-    this.adsExitPendingUntil = 0;
     this.wantLock = false; // the player has chosen mouse capture this session
     this.bindings = { ...DEFAULT_BINDINGS };
     this.sensitivity = parseFloat(setting("mc2.sens") || "1.0") || 1.0;
@@ -104,9 +100,6 @@ export class Controls {
     this.fireHeld = false;
     this.taps = []; // pending button taps
     this.passthrough = new Map(); // real pointerId -> finger (outside pointer lock)
-    this.menuHover = null;
-    this.menuClickHeld = false;
-    this.menuInactive = false;
     this.install();
     requestAnimationFrame(() => this.tick());
   }
@@ -116,7 +109,7 @@ export class Controls {
   // area recently (it briefly disappears while the HUD is rebuilt, e.g.
   // right after a cutscene, which must not drop or block mouse capture).
   get gameplay() {
-    return !this.inCutscene && !this.paused && !this.loadout && (this.layout.has("Thumbstick_camera") || performance.now() - this.cameraSeenAt < 1500);
+    return !this.inCutscene && !this.paused && !this.loadout && (this.layout.has("Thumbstick_camera") || (this.locked && performance.now() - this.cameraSeenAt < 1500));
   }
   get cutscene() {
     return this.inCutscene;
@@ -124,31 +117,27 @@ export class Controls {
 
   setGameState(st) {
     const wasPlaying = this.gameplay;
-    this.ads = !!st.ads;
-    // Right button released while the sights were still coming up: leave
-    // as soon as the game reports we're in.
-    if (this.ads && !this.adsHeld && performance.now() < this.adsExitPendingUntil) {
-      this.adsExitPendingUntil = 0;
-      this.tap(MOUSE_RIGHT);
-    }
+    const wasMenu = this.paused || this.loadout;
+    const isMenu = !!(st.paused || st.loadout);
+    const leavingCutscene = this.inCutscene && !st.cutscene;
     if (!wasPlaying && !st.cutscene && !st.paused) this.releasePassthrough();
     this.inCutscene = !!st.cutscene;
     this.paused = !!st.paused;
     this.loadout = !!st.loadout;
-    // A held menu touch must not turn into an armory click on transition.
-    if (this.menuHover && (this.loadout || this.gameplay || this.inCutscene)) this.releaseMenuHover(true);
-    this.leaveIfNotPlaying();
-    // Back from the pause menu: re-capture the mouse if the browser still
-    // considers the click on "resume" a fresh user gesture.
-    if (!wasPlaying && this.gameplay && this.wantLock && !this.locked && navigator.userActivation && navigator.userActivation.isActive) {
-      this.requestLock("resume");
+    // A camera HUD from before a menu is not evidence that gameplay resumed.
+    if (wasMenu !== isMenu) {
+      this.cameraSeenAt = -1e9;
+      this.layout.delete("Thumbstick_camera");
     }
+    if (leavingCutscene && this.locked) this.cameraSeenAt = performance.now();
+    this.leaveIfNotPlaying();
     this.updateHint();
   }
 
   leaveIfNotPlaying() {
     if (!this.gameplay) {
-      if (this.locked && !this.forceLock) document.exitPointerLock();
+      // Keep capture through in-mission cutscenes, but release it for menus.
+      if (this.locked && !this.forceLock && (!this.inCutscene || this.paused || this.loadout)) document.exitPointerLock();
       this.releaseAll();
     }
   }
@@ -172,6 +161,7 @@ export class Controls {
     // Hidden (fully faded) controls stay in the HUD tree; ignore them.
     this.layout = new Map(rects.filter((r) => r.alpha === undefined || r.alpha > 8).map((r) => [r.name, r]));
     this.anchor = null;
+    if (this.paused || this.loadout) this.layout.delete("Thumbstick_camera");
     if (this.layout.has("Thumbstick_camera")) this.cameraSeenAt = performance.now();
     else if (this.locked) {
       // Only leave mouse capture if the camera area stays gone.
@@ -179,11 +169,10 @@ export class Controls {
       this.leaveTimer = setTimeout(() => this.leaveIfNotPlaying(), 1600);
     }
     this.updateHint();
-    if (this.gameplay) this.releaseMenuHover(true);
   }
 
   updateHint() {
-    if (this.gameplay && !this.locked) this.onHint("Click to capture the mouse — WASD move · Alt walk · mouse look · L-click fire · hold R-click aim · Ctrl crouch · R reload · Q/wheel weapon · G grenade · E use · F melee · Esc pause");
+    if (this.gameplay && !this.locked) this.onHint("Click to capture the mouse — WASD move · Alt walk · mouse look · L-click fire · R-click / Right Ctrl toggle aim · Left Ctrl / C crouch · R reload · Q/wheel weapon · G grenade · E use · F melee · Esc pause");
     else if (this.cutscene) this.onHint("Space / Enter: skip");
     else this.onHint("");
   }
@@ -235,11 +224,11 @@ export class Controls {
   }
 
   releaseAll() {
-    this.adsHeld = false;
     this.release(MOVE);
     this.release(RIGHT);
     this.fireHeld = false;
     this.keys.clear();
+    this.lookDx = this.lookDy = 0;
     this.taps = [];
   }
 
@@ -300,14 +289,6 @@ export class Controls {
 
     this.updateMovement();
 
-    // Hold-to-aim: if the game left iron sights on its own (reload, weapon
-    // switch) while the right button is still held, go back in as soon as it
-    // lets us -- retrying, since it ignores the button mid-reload.
-    if (this.adsHeld && !this.ads && now - this.adsEnterAt > 700 && !this.taps.length) {
-      this.adsEnterAt = now;
-      this.tap(MOUSE_RIGHT);
-    }
-
     // Pending button taps (press for a few frames, then release).
     for (const t of this.taps) {
       if (t.state === 0) {
@@ -329,25 +310,41 @@ export class Controls {
     const R = this.fingers[RIGHT];
     if (this.lookDx || this.lookDy) {
       const k = this.sensitivity * 0.6;
-      const mx = this.lookDx * k, my = this.lookDy * k * (this.invertY ? -1 : 1);
-      this.lookDx = this.lookDy = 0;
       if (R.owner === "fire") {
+        // A fire touch must remain held. Keep the existing fire-drag behavior.
+        const mx = this.lookDx * k, my = this.lookDy * k * (this.invertY ? -1 : 1);
+        this.lookDx = this.lookDy = 0;
         this.moveTo(RIGHT, R.x + mx, R.y + my);
       } else if (R.owner === null || R.owner === "look") {
         const a = this.cameraAnchor();
         if (a) {
+          // Deliver this frame's movement immediately in bounded steps. Limit
+          // pathological deltas instead of leaving delayed motion in a queue.
+          let mx = this.lookDx * k, my = this.lookDy * k * (this.invertY ? -1 : 1);
+          this.lookDx = this.lookDy = 0;
+          const magnitude = Math.hypot(mx, my);
+          const scale = magnitude > 4096 ? 4096 / magnitude : 1;
+          mx *= scale; my *= scale;
+          const steps = Math.max(1, Math.ceil(Math.hypot(mx, my) / 32));
+          const dx = mx / steps, dy = my / steps;
           if (R.owner !== "look") this.press(RIGHT, a.x, a.y, "look");
-          let nx = R.x + mx, ny = R.y + my;
-          // Re-centre the virtual finger before it reaches the screen edge.
-          if (Math.abs(nx - a.x) > 140 || Math.abs(ny - a.y) > 110 || nx < 4 || ny < 4 || nx > this.W - 4 || ny > this.H - 4) {
-            this.release(RIGHT);
-            this.press(RIGHT, a.x, a.y, "look");
-            nx = a.x + mx;
-            ny = a.y + my;
+          for (let i = 0; i < steps; i++) {
+            let nx = R.x + dx, ny = R.y + dy;
+            if (Math.abs(nx - a.x) > 140 || Math.abs(ny - a.y) > 110 || nx < 4 || ny < 4 || nx > this.W - 4 || ny > this.H - 4) {
+              this.release(RIGHT);
+              this.press(RIGHT, a.x, a.y, "look");
+              nx = a.x + dx;
+              ny = a.y + dy;
+            }
+            this.moveTo(RIGHT, nx, ny);
           }
-          this.moveTo(RIGHT, nx, ny);
           this.lastLook = now;
+        } else {
+          this.lookDx = this.lookDy = 0;
         }
+      } else {
+        // Do not replay old camera input after a button tap finishes.
+        this.lookDx = this.lookDy = 0;
       }
     } else if (R.owner === "look" && now - this.lastLook > 120) {
       this.release(RIGHT);
@@ -391,22 +388,6 @@ export class Controls {
     });
   }
 
-  // Hold-to-aim: the game's iron-sight button toggles, so tap it on press
-  // (if not already aiming) and again on release (if aiming).
-  aim(down) {
-    this.adsHeld = down;
-    if (down) {
-      if (!this.ads) {
-        this.adsEnterAt = performance.now();
-        this.tap(MOUSE_RIGHT);
-      }
-    } else if (this.ads) {
-      this.tap(MOUSE_RIGHT);
-    } else if (performance.now() - this.adsEnterAt < 800) {
-      this.adsExitPendingUntil = performance.now() + 1500;
-    }
-  }
-
   fire(down) {
     this.fireHeld = down;
     const R = this.fingers[RIGHT];
@@ -421,30 +402,6 @@ export class Controls {
   }
 
   // ---- DOM events ----
-  releaseMenuHover(cancel = false) {
-    if (!this.menuHover || (this.menuInactive && !cancel)) return;
-    const { x, y, finger } = this.menuHover;
-    this.menuHover = null;
-    // Move outside all controls before lifting during a screen transition.
-    if (cancel) this.send(2, -1, -1, finger);
-    this.send(0, cancel ? -1 : x, cancel ? -1 : y, finger);
-  }
-
-  hoverMenu(e) {
-    if (e.pointerType !== "mouse" || this.menuInactive || this.loadout || this.locked || this.gameplay || this.inCutscene || this.menuClickHeld) return;
-    const p = this.toGame(e);
-    if (!this.menuHover) {
-      const used = new Set(this.passthrough.values());
-      const finger = used.has(0) ? (used.has(1) ? -1 : 1) : 0;
-      if (finger < 0) return;
-      this.menuHover = { ...p, finger };
-      this.send(1, p.x, p.y, finger);
-    } else {
-      Object.assign(this.menuHover, p);
-      this.send(2, p.x, p.y, this.menuHover.finger);
-    }
-  }
-
   toGame(e) {
     const r = this.canvas.getBoundingClientRect();
     return { x: Math.round(((e.clientX - r.left) / r.width) * this.W), y: Math.round(((e.clientY - r.top) / r.height) * this.H) };
@@ -456,19 +413,10 @@ export class Controls {
       e.preventDefault();
       if (this.locked) return; // buttons handled by mousedown/mouseup below
       if (this.gameplay && e.pointerType === "mouse") {
-        this.releaseMenuHover(true);
         this.requestLock("click");
         return;
       }
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      if (e.pointerType === "mouse" && !this.loadout && !this.inCutscene) {
-        this.hoverMenu(e);
-        this.menuClickHeld = true;
-        this.releaseMenuHover();
-        c.setPointerCapture(e.pointerId);
-        return;
-      }
-      if (e.pointerType !== "mouse") this.releaseMenuHover(true);
       if (e.pointerType === "mouse" && (this.layout.size || this.inCutscene || this.paused)) {
         console.log(`[controls] click passed to the game, not capturing the mouse: cutscene=${this.inCutscene} paused=${this.paused} cameraArea=${this.layout.has("Thumbstick_camera")}`);
       }
@@ -483,46 +431,39 @@ export class Controls {
     });
     c.addEventListener("pointermove", (e) => {
       if (this.locked) {
-        this.lookDx += e.movementX;
-        this.lookDy += e.movementY;
+        if (this.gameplay) {
+          this.lookDx += e.movementX;
+          this.lookDy += e.movementY;
+        }
         return;
       }
-      this.hoverMenu(e);
       const f = this.passthrough.get(e.pointerId);
       if (f === undefined) return;
       const p = this.toGame(e);
       this.send(2, p.x, p.y, f);
     });
     const up = (e) => {
-      if (e.pointerType === "mouse" && this.menuClickHeld) {
-        this.menuClickHeld = false;
-        if (e.type !== "pointercancel") this.hoverMenu(e);
-        return;
-      }
       if (this.locked) return;
       const f = this.passthrough.get(e.pointerId);
       if (f === undefined) return;
       this.passthrough.delete(e.pointerId);
       const p = this.toGame(e);
-      this.send(0, p.x, p.y, f);
+      if (e.type === "pointercancel") this.send(2, -1, -1, f);
+      this.send(0, e.type === "pointercancel" ? -1 : p.x, e.type === "pointercancel" ? -1 : p.y, f);
     };
     c.addEventListener("pointerup", up);
-    c.addEventListener("pointerenter", (e) => this.hoverMenu(e));
-    // Pointer leave and blur keep synthetic menu touches held, preventing
-    // Alt-Tab from activating the highlighted button.
     // While the mouse is captured, use mouse events for the buttons: pointer
     // events don't report a second button pressed while another is held
     // (e.g. aiming while firing).
     c.addEventListener("mousedown", (e) => {
-      if (!this.locked) return;
+      if (!this.locked || !this.gameplay) return;
       if (e.button === 0) this.fire(true);
-      else if (e.button === 2) this.aim(true);
+      else if (e.button === 2) this.tap(MOUSE_RIGHT);
       e.preventDefault();
     });
     addEventListener("mouseup", (e) => {
       if (!this.locked) return;
       if (e.button === 0) this.fire(false);
-      else if (e.button === 2) this.aim(false);
     });
     c.addEventListener("pointercancel", up);
     c.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -541,8 +482,6 @@ export class Controls {
       this.updateHint();
     });
     document.addEventListener("pointerlockchange", () => {
-      this.releaseMenuHover(true);
-      this.menuClickHeld = false;
       if (this.locked) this.releasePassthrough();
       if (!this.locked) {
         // Leaving mouse capture (Esc) pauses the game, like the pause button.
@@ -575,15 +514,8 @@ export class Controls {
       this.keys.delete(e.code);
     });
     addEventListener("blur", () => {
-      this.menuInactive = true;
-      this.menuClickHeld = false;
       this.releasePassthrough();
       this.releaseAll();
-    });
-    addEventListener("focus", () => { this.menuInactive = false; });
-    document.addEventListener("visibilitychange", () => {
-      this.menuInactive = document.hidden;
-      if (document.hidden) this.menuClickHeld = false;
     });
   }
 }

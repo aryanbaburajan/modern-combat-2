@@ -20,10 +20,10 @@ export function promptRules(k) {
   return [
     // Tutorial hints (they support colour markup).
     ["<b>Stand up</b> by tapping the <font color='#FF3300'>crouch icon</font> and <b>crouch</b> by tapping the <font color='#FF3300'>stand icon</font>.",
-      `<b>Stand up</b> and <b>crouch</b> by pressing ${K(k.crouch)}.`],
+      `Press ${K(k.crouch)} to <b>crouch</b> or <b>stand up</b>.`],
     ["Tap the <font color='#FF3300'>melee icon</font> to attack", `Press ${K(k.melee)} to attack`],
     ["Tap the <font color='#FF3300'>shoot icon</font> to fire the pistol.", `Press the ${K(k.fire)} to fire the pistol.`],
-    ["Tap the<font color='#FF3300'> iron sight icon</font> to shoot", `Press the ${K(k.aim)} to shoot`],
+    ["Tap the<font color='#FF3300'> iron sight icon</font> to shoot", `Press the ${K(k.aim)} to toggle aiming`],
     ["Follow Downs' gun by <font color='#FF3300'>using the virtual stick or dragging on the screen</font>.", `${K("Click")} to take control of the mouse, then follow Downs' gun by moving it.`],
     ["Use the <font color='#FF3300'>Virtual Analog Stick</font> to move around the cell.", `Use ${K(k.move)} to move around the cell.`],
     ["by tapping the weapon icon when it appears.", `by pressing ${K(k.use)} when the weapon icon appears.`],
@@ -67,7 +67,7 @@ function keyboardReference(k) {
   return [
     `CLICK THE SCREEN TO TAKE CONTROL OF THE MOUSE, ${u(k.pause)} TO PAUSE. MOVE THE MOUSE TO LOOK AROUND.`,
     `${u(k.move)}: MOVE   ${u(k.walk)}: WALK   ${u(k.crouch)}: CROUCH`,
-    `${u(k.fire)}: FIRE   HOLD ${u(k.aim)}: AIM   ${u(k.reload)}: RELOAD   ${u(k.switchWeapon)} / MOUSE WHEEL: SWITCH WEAPON`,
+    `${u(k.fire)}: FIRE   ${u(k.aim)}: TOGGLE AIM   ${u(k.reload)}: RELOAD   ${u(k.switchWeapon)} / MOUSE WHEEL: SWITCH WEAPON`,
     `${u(k.grenade)}: GRENADE   ${u(k.switchGrenade)}: GRENADE TYPE   ${u(k.use)}: USE   ${u(k.melee)}: MELEE   ${u(k.airstrike)}: AIRSTRIKE   ${u(k.skip)}: SKIP CUTSCENE`,
   ].join("\n");
 }

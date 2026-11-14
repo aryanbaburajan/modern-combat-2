@@ -248,7 +248,6 @@ pub extern "C" fn mc2_boot(w: u32, h: u32, lang: u32) -> i32 {
 #[no_mangle]
 pub extern "C" fn mc2_frame(bg_budget: u32) -> i32 {
     let r = call_native("GameRenderer", "nativeRender", &[]).and_then(|_| hle::thread::run_background(emu(), bg_budget as u64));
-    crate::game::tick_early_move(emu());
     match r {
         Ok(()) => 0,
         Err(e) => fail(e),
@@ -397,12 +396,6 @@ pub unsafe extern "C" fn mc2_set_text_rules(p: *const u8, len: usize) {
         .map(|(a, b)| (a.replace("\\n", "\n"), b.replace("\\n", "\n")))
         .collect();
     crate::game::set_text_rules(emu(), rules);
-}
-
-/// Let the player move and crouch from the start of the first mission.
-#[no_mangle]
-pub extern "C" fn mc2_set_early_move(on: u32) {
-    emu().early.enabled = on != 0;
 }
 
 /// Unlock all missions (call after boot).

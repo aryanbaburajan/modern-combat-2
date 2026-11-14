@@ -16,7 +16,7 @@ const GL_BGRA_EXT = 0x80e1;
 const typeSize = { 0x1400: 1, 0x1401: 1, 0x1402: 2, 0x1403: 2, 0x1404: 4, 0x1405: 4, 0x1406: 4, 0x140c: 4, 0x8d61: 2, 0x140b: 2 };
 
 export class GLES {
-  constructor(gl, mem, log) {
+  constructor(gl, mem, log, { debugDraws = false } = {}) {
     this.gl = gl;
     this.mem = mem; // { u8(), u16(), u32(), i32(), f32(), base, str(ptr) }
     this.log = log;
@@ -27,6 +27,10 @@ export class GLES {
     this.boundArray = 0;
     this.boundElement = 0;
     this.elementShadow = new Map(); // element buffer name -> Uint8Array copy
+    this.debugDraws = debugDraws;
+    this.bufferSizes = new Map();
+    this.pendingErrors = [];
+    this.drawWarnings = new Set();
     this.attribs = [];
     for (let i = 0; i < 16; i++) this.attribs.push({ enabled: false, client: false, size: 4, type: GL_FLOAT, norm: false, stride: 0, ptr: 0 });
     this.streamBufs = [];
@@ -166,6 +170,30 @@ export class GLES {
     return false;
   }
 
+  // Debug mode preserves GL errors for the guest while collecting draw state.
+  debugDraw(draw, info) {
+    if (!this.debugDraws) { draw(); return; }
+    const gl = this.gl;
+    const previous = gl.getError();
+    if (previous && !this.pendingErrors.includes(previous)) this.pendingErrors.push(previous);
+    draw();
+    const error = gl.getError();
+    if (!error) return;
+    if (!this.pendingErrors.includes(error)) this.pendingErrors.push(error);
+    const attrs = this.attribs.flatMap((a, index) => a.enabled ? [{
+      index, client: a.client, buffer: a.buffer || 0,
+      bufferSize: a.client ? null : (this.bufferSizes.get(a.buffer) ?? null),
+      offset: a.ptr, size: a.size, type: a.type, stride: a.stride,
+      requiredBytes: a.client || info.maxIndex == null ? null : a.ptr + info.maxIndex * (a.stride || a.size * (typeSize[a.type] || 4)) + a.size * (typeSize[a.type] || 4),
+    }] : []);
+    const detail = { error: `0x${error.toString(16)}`, ...info, program: this.curProgram?.prog?._name || 0, attributes: attrs };
+    const signature = JSON.stringify(detail);
+    if (this.drawWarnings.size < 10 && !this.drawWarnings.has(signature)) {
+      this.drawWarnings.add(signature);
+      this.log(`[gl-draw-error] ${signature}`);
+    }
+  }
+
   installFuncs() {
     const gl = this.gl;
     const F = this.funcs;
@@ -205,7 +233,7 @@ export class GLES {
       if (p === 0x0cf5) this.unpackAlign = v;
       if (p === 0x0cf5 || p === 0x0d05) gl.pixelStorei(p, v);
     };
-    F.glGetError = () => gl.getError();
+    F.glGetError = () => this.pendingErrors.length ? this.pendingErrors.shift() : gl.getError();
     F.glFinish = () => gl.finish();
     F.glFlush = () => gl.flush();
 
@@ -217,6 +245,7 @@ export class GLES {
     F.glDeleteBuffers = (n, p) =>
       this.del(n, p, (o) => {
         this.elementShadow.delete(o._name);
+        this.bufferSizes.delete(o._name);
         if (this.boundArray === o._name) this.boundArray = 0;
         if (this.boundElement === o._name) this.boundElement = 0;
         gl.deleteBuffer(o);
@@ -233,6 +262,7 @@ export class GLES {
       gl.bindBuffer(t, o);
     };
     F.glBufferData = (t, size, data, usage) => {
+      if (this.debugDraws) this.bufferSizes.set(t === GL_ARRAY_BUFFER ? this.boundArray : this.boundElement, size);
       if (data) {
         const b = this.bytes(data, size);
         gl.bufferData(t, b, usage);
@@ -268,6 +298,7 @@ export class GLES {
       a.stride = stride;
       a.ptr = ptr;
       a.client = this.boundArray === 0;
+      a.buffer = this.boundArray;
       if (!a.client) gl.vertexAttribPointer(i, size, a.type, a.norm, stride, ptr);
     };
     F.glVertexAttrib4f = (i, x, y, z, w) => gl.vertexAttrib4f(i, f(x), f(y), f(z), f(w));
@@ -276,13 +307,27 @@ export class GLES {
     F.glDrawArrays = (mode, first, count) => {
       if (this.anyClient()) this.prepareClientArrays(first + count);
       this.drawCalls++;
-      gl.drawArrays(mode, first, count);
+      this.debugDraw(() => gl.drawArrays(mode, first, count), { call: "drawArrays", mode, first, count, maxIndex: count ? first + count - 1 : null });
     };
     F.glDrawElements = (mode, count, type, indices) => {
       const isz = type === GL_UNSIGNED_BYTE ? 1 : type === GL_UNSIGNED_SHORT ? 2 : 4;
       const client = this.boundElement === 0;
       let idxBytes = null;
       if (client) idxBytes = this.copyBytes(indices, count * isz);
+      let debugMax = null;
+      if (this.debugDraws) {
+        const data = idxBytes || this.elementShadow.get(this.boundElement);
+        const offset = client ? 0 : indices;
+        if (data && offset + count * isz <= data.length) {
+          const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+          const restart = isz === 1 ? 0xff : isz === 2 ? 0xffff : 0xffffffff;
+          for (let i = 0; i < count; i++) {
+            const p = offset + i * isz;
+            const n = isz === 1 ? data[p] : isz === 2 ? view.getUint16(p, true) : view.getUint32(p, true);
+            if (n !== restart) debugMax = Math.max(debugMax ?? 0, n);
+          }
+        }
+      }
       if (this.anyClient()) {
         let src = idxBytes;
         let off = 0;
@@ -306,10 +351,10 @@ export class GLES {
       if (client) {
         gl.bindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.indexStream);
         gl.bufferData(GL_ELEMENT_ARRAY_BUFFER, idxBytes, gl.STREAM_DRAW);
-        gl.drawElements(mode, count, type, 0);
+        this.debugDraw(() => gl.drawElements(mode, count, type, 0), { call: "drawElements", mode, count, type, indices, elementBuffer: 0, maxIndex: debugMax });
         gl.bindBuffer(GL_ELEMENT_ARRAY_BUFFER, null);
       } else {
-        gl.drawElements(mode, count, type, indices);
+        this.debugDraw(() => gl.drawElements(mode, count, type, indices), { call: "drawElements", mode, count, type, indices, elementBuffer: this.boundElement, elementBufferSize: this.bufferSizes.get(this.boundElement) ?? null, maxIndex: debugMax });
       }
     };
 

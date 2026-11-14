@@ -246,8 +246,6 @@ function sendHiddenHud() {
   worker.postMessage({ type: "textrules", rules: touchHud ? [] : promptRules(KEY_LABELS) });
 }
 sendHiddenHud();
-// Let the player move and crouch from the start of the first mission.
-worker.postMessage({ type: "earlymove", on: !params.has("noearlymove") });
 canvas.addEventListener("pointerdown", (e) => {
   if (e.pointerType === "touch" && !touchHud) {
     touchHud = true;
@@ -286,7 +284,9 @@ async function prepareIntro() {
   const source = await cache.match(assetUrl("GloftBPHP/data/intro/logo.mp4"));
   if (!source) throw new Error("The game data ZIP does not contain the intro video.");
   await waitUntilVisible();
-  const { FFmpeg } = await import("./vendor/ffmpeg/index.js");
+  let FFmpeg;
+  try { ({ FFmpeg } = await import("./vendor/ffmpeg/index.js")); }
+  catch (error) { throw new Error(`Could not load the intro converter: ${error.message || error}`, { cause: error }); }
   await waitUntilVisible();
   const ffmpeg = new FFmpeg();
   let interrupted = false;
@@ -295,7 +295,12 @@ async function prepareIntro() {
   };
   document.addEventListener("visibilitychange", onVisibility);
   try {
-    await ffmpeg.load({ coreURL: new URL("vendor/ffmpeg-core/ffmpeg-core.js", location.href).href, wasmURL: new URL("vendor/ffmpeg-core/ffmpeg-core.wasm", location.href).href });
+    try {
+      await ffmpeg.load({ coreURL: new URL("vendor/ffmpeg-core/ffmpeg-core.js", location.href).href, wasmURL: new URL("vendor/ffmpeg-core/ffmpeg-core.wasm", location.href).href });
+    } catch (error) {
+      if (interrupted) throw error;
+      throw new Error(`Could not load the intro converter: ${error.message || error}`, { cause: error });
+    }
     ffmpeg.on("progress", ({ progress }) => updatePreparation("conversion", progress));
     await ffmpeg.writeFile("intro.mp4", new Uint8Array(await source.arrayBuffer()));
     const code = await ffmpeg.exec(["-i", "intro.mp4", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "25", "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", "converted.mp4"]);

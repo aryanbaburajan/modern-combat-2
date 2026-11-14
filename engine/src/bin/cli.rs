@@ -260,7 +260,6 @@ fn main() {
     emu.hle.vfs.log_opens = std::env::var("VFS_LOG").is_ok();
     emu.hle.jni.trace = std::env::var("JNI_LOG").is_ok();
     emu.trace = std::env::var("TRACE").is_ok();
-    emu.early.enabled = std::env::var("EARLY_MOVE").is_ok();
     if let Ok(list) = std::env::var("TRACE_FUNCS") {
         for name in list.split(',') {
             match emu.lib.find_func(name) {
@@ -441,7 +440,7 @@ fn run_script(emu: &mut Emu, script: &str, render: u32, env: u32, cls: u32) {
                     let roots = mc2engine::game::hud_roots(emu);
                     println!("  roots {:x?} cutscene={} paused={}", roots, mc2engine::game::in_cutscene(emu), mc2engine::game::is_paused(emu));
                     println!("  visible: {}", mc2engine::game::hud_visible_names(emu).join(", "));
-                    println!("  Character::Crouch hits={} Stand hits={} early-move level={:?} overrides={}", emu.probes[mc2engine::game::PROBE_CROUCH].hits, emu.probes[mc2engine::game::PROBE_STAND].hits, emu.early.level, emu.early.overrides);
+                    println!("  Character::Crouch hits={} Stand hits={}", emu.probes[mc2engine::game::PROBE_CROUCH].hits, emu.probes[mc2engine::game::PROBE_STAND].hits);
                     for r in mc2engine::game::hud_scan(emu, 800, 480, 16) {
                         println!("    {:<24} ({:.0},{:.0})-({:.0},{:.0}) c=({:.0},{:.0}) a={}", r.name, r.x0, r.y0, r.x1, r.y1, r.cx, r.cy, r.alpha);
                     }
@@ -490,7 +489,6 @@ fn run_script(emu: &mut Emu, script: &str, render: u32, env: u32, cls: u32) {
             eprintln!("FAULT in background: {}", e);
             std::process::exit(1);
         }
-        mc2engine::game::tick_early_move(emu);
         frames += 1;
         // Pace like a 60 Hz display; the game's timing code expects real frame times.
         let target = t0 + std::time::Duration::from_secs_f64(frames as f64 / 60.0);

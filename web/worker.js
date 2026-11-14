@@ -321,12 +321,12 @@ async function start(msg) {
   memView.base = exp.mc2_guest_base();
   // Apply page settings now so the game's text is patched before it loads.
   for (let i = queue.length - 1; i >= 0; i--) {
-    if (["hidehud", "textrules", "earlymove"].includes(queue[i].kind)) applyConfig(queue.splice(i, 1)[0]);
+    if (["hidehud", "textrules"].includes(queue[i].kind)) applyConfig(queue.splice(i, 1)[0]);
   }
 
   const gl = canvas.getContext("webgl2", { antialias: false, depth: true, stencil: true, alpha: false, preserveDrawingBuffer: false });
   if (!gl) { postMessage({ type: "fatal", text: "WebGL2 is not available" }); return; }
-  gles = new GLES(gl, memView, log);
+  gles = new GLES(gl, memView, log, { debugDraws: !!(msg.flags & 8) });
   const np = exp.mc2_alloc(16384);
   const nn = exp.mc2_gl_names(np, 16384);
   gles.setNames(hostStr(np, nn).split("\n"));
@@ -379,8 +379,7 @@ function applyConfig(ev) {
     fn(p, b.length);
     exp.mc2_free(p, b.length + 1);
   };
-  if (ev.kind === "earlymove") exp.mc2_set_early_move(ev.on ? 1 : 0);
-  else if (ev.kind === "hidehud") send(ev.names.join("\n"), exp.mc2_set_hidden_hud);
+  if (ev.kind === "hidehud") send(ev.names.join("\n"), exp.mc2_set_hidden_hud);
   else if (ev.kind === "textrules") send(ev.rules.map(([a, c]) => a.replace(/\n/g, "\\n") + "\t" + c.replace(/\n/g, "\\n")).join("\n"), exp.mc2_set_text_rules);
 }
 
@@ -413,6 +412,8 @@ let gameState = -1;
 function trackHud() {
   const st = exp.mc2_game_state();
   if (st !== gameState) {
+    // Re-send the HUD after pause/cutscene transitions even if its geometry is unchanged.
+    hudSentSig = -1;
     gameState = st;
     postMessage({ type: "gamestate", cutscene: !!(st & 1), paused: !!(st & 2), ads: !!(st & 4), loadout: !!(st & 8) });
   }
@@ -439,7 +440,7 @@ function frame() {
       if (ev.kind === "touch") check(exp.mc2_touch(ev.action, ev.x, ev.y, ev.id), "touch");
       else if (ev.kind === "key") check(exp.mc2_key(ev.down, ev.code), "key");
       else if (ev.kind === "pause") check(exp.mc2_pause(ev.paused), "pause");
-      else if (ev.kind === "hidehud" || ev.kind === "textrules" || ev.kind === "earlymove") applyConfig(ev);
+      else if (ev.kind === "hidehud" || ev.kind === "textrules") applyConfig(ev);
       else if (ev.kind === "locate") postMessage({ type: "located", id: ev.id, ...hudLocate(ev.patterns) });
       else if (ev.kind === "hudscan") postMessage({ type: "hud", id: ev.id, rects: hudScan(ev.step || 8) });
     }
@@ -477,7 +478,7 @@ onmessage = (e) => {
     case "visibility": pageVisible = m.visible; if (pageVisible) { for (const resolve of visibleWaiters.splice(0)) resolve(); } break;
     case "start": start(m).catch((err) => postMessage({ type: "fatal", text: String(err.stack || err) })); break;
     case "resume-game": if (firstDrawReported && !running && !failed) { running = true; requestAnimationFrame(frame); } break;
-    case "touch": case "key": case "pause": case "hudscan": case "locate": case "hidehud": case "textrules": case "earlymove": queue.push({ kind: m.type, ...m }); break;
+    case "touch": case "key": case "pause": case "hudscan": case "locate": case "hidehud": case "textrules": queue.push({ kind: m.type, ...m }); break;
     case "duration": audio.durations.set(m.url, m.ms); break;
   }
 };
