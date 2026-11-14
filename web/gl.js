@@ -65,6 +65,12 @@ export class GLES {
       const a = this.mem.u32()[argsPtr >> 2];
       return this.gl.getBufferParameter(a, this.gl.BUFFER_SIZE) | 0;
     }
+    if (id === 0xffff0002) {
+      const args = this.mem.u32();
+      const i = argsPtr >> 2;
+      this.gl.getBufferSubData(args[i], 0, this.bytes(args[i + 1], args[i + 2]));
+      return 0;
+    }
     const f = this.table[id];
     if (!f) return 0;
     const i = argsPtr >> 2;
@@ -159,7 +165,10 @@ export class GLES {
       const len = maxVertex > 0 ? (maxVertex - 1) * stride + elem : 0;
       if (!this.streamBufs[i]) this.streamBufs[i] = gl.createBuffer();
       gl.bindBuffer(GL_ARRAY_BUFFER, this.streamBufs[i]);
-      gl.bufferData(GL_ARRAY_BUFFER, this.bytes(a.ptr, len), gl.STREAM_DRAW);
+      // Allocate a complete final stride for drivers that validate/fetch the
+      // full interleaved record, while reading only valid attribute bytes.
+      gl.bufferData(GL_ARRAY_BUFFER, maxVertex * stride, gl.STREAM_DRAW);
+      if (len) gl.bufferSubData(GL_ARRAY_BUFFER, 0, this.bytes(a.ptr, len));
       gl.vertexAttribPointer(i, a.size, a.type, a.norm, a.stride, 0);
       touched = true;
     }

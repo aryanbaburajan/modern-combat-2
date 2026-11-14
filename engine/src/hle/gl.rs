@@ -245,6 +245,15 @@ fn gl_map_buffer(emu: &mut Emu) -> Flow {
     let target = emu.arg(0);
     let size = emu.plat.gl(&mut emu.mem, 0xffff_0001, &[target]);
     let p = emu.hle.heap.malloc(&mut emu.mem, size.max(4));
+    if p == 0 {
+        emu.ret(0);
+        return Flow::Ret;
+    }
+    // Preserve untouched bytes when the guest only updates part of a mapping.
+    // The browser implements this pseudo-call with WebGL2 getBufferSubData.
+    if size != 0 {
+        emu.plat.gl(&mut emu.mem, 0xffff_0002, &[target, p, size]);
+    }
     emu.hle.gl.mapped = Some((target, p, size));
     emu.ret(p);
     Flow::Ret
