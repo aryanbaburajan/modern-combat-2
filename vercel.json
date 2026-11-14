@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run build:site",
+  "outputDirectory": "dist",
+  "headers": [
+    {
+      "source": "/(.*\\.(?:js|wasm))",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
+  ]
+}

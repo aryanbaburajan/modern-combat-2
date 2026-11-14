@@ -1,0 +1,17 @@
+engine/target/
+web/game/
+tools/cputest/out/
+node_modules/
+dist/
+.vercel/
+.wrangler/
+.env.local
+__pycache__/
+.claude/
+*.zip
+.vercel
+*.apk
+modern-combat-2-black-pegasus-v-1.0.5*/
+
+# Local game reference files (not distributed).
+/reference/

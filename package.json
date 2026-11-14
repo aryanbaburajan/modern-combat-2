@@ -1,0 +1,25 @@
+{
+  "name": "modern-combat-2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:network": "node --test tools/network.test.mjs",
+    "dev": "npm run serve",
+    "build:site": "node tools/build-site.mjs",
+    "build": "cargo build --release --lib --target wasm32-unknown-unknown --manifest-path engine/Cargo.toml && cp engine/target/wasm32-unknown-unknown/release/mc2engine.wasm web/",
+    "serve": "node tools/serve.mjs",
+    "start": "npm run build && npm run serve",
+    "multiplayer:dev": "wrangler dev --config wrangler.multiplayer.jsonc",
+    "multiplayer:deploy": "wrangler deploy --config wrangler.multiplayer.jsonc",
+    "multiplayer:check": "wrangler deploy --dry-run --config wrangler.multiplayer.jsonc"
+  },
+  "devDependencies": {
+    "vercel": "^64.3.1",
+    "wrangler": "^4.151.0"
+  },
+  "dependencies": {
+    "@ffmpeg/core": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "ws": "^8.22.0"
+  }
+}

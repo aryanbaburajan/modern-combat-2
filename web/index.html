@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Modern Combat 2: Black Pegasus (WebAssembly)</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<script src="config.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #ccc; font: 13px "Geist Mono", ui-monospace, monospace; overflow: hidden; }
+  #wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  body.preparing #wrap::after { content: ""; position: absolute; inset: 0; background: #111; }
+  #screen { max-width: 100vw; max-height: 100vh; aspect-ratio: 5 / 3; width: 100vw; touch-action: none; background: #111; image-rendering: auto; }
+  /* Shared overlay text. */
+  .mc2 { font-family: "Geist Mono", ui-monospace, monospace; color: #eee; }
+  #status { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #111; border: 1px solid #444; padding: 10px 14px; display: none; max-width: 80vw; font-size: 14px; }
+  #start, #skip { font: 500 13px "Geist Mono", ui-monospace, monospace; color: #eee; padding: 10px 14px; cursor: pointer; background: #161616; border: 1px solid #444; border-radius: 2px; }
+  #start:hover, #skip:hover { background: #222; border-color: #777; }
+  #start:focus-visible, #skip:focus-visible { outline: 1px solid #aaa; outline-offset: 2px; }
+  #setup { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(440px, 85vw); padding: 20px; background: #111; border: 1px solid #444; display: grid; gap: 12px; }
+  #setup label { display: grid; gap: 5px; }
+  #setup a { color: #a9c9e9; text-underline-offset: 3px; }
+  #setup a:focus-visible { outline: 1px solid #aaa; outline-offset: 2px; }
+  #game-files { display: grid; gap: 12px; }
+  #game-files[hidden], #replace-files[hidden] { display: none; }
+  #replace-files { color: #aaa; background: none; border: 0; padding: 0; text-align: left; font: inherit; cursor: pointer; text-decoration: underline; }
+  #replace-files:focus-visible { outline: 1px solid #aaa; outline-offset: 2px; }
+  #setup input[type="file"] { min-width: 0; width: 100%; color: #aaa; font: inherit; cursor: pointer; }
+  #setup input[type="file"]::file-selector-button { font: 500 13px "Geist Mono", ui-monospace, monospace; color: #eee; padding: 8px 12px; margin-right: 12px; cursor: pointer; background: #161616; border: 1px solid #444; border-radius: 2px; }
+  #setup input[type="file"]:hover::file-selector-button { background: #222; border-color: #777; }
+  #setup input[type="file"]:focus-visible { outline: 1px solid #aaa; outline-offset: 2px; }
+  #save-warning { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 31; max-width: 80vw; background: #281b16; color: #ffd6bd; border: 1px solid #a9694b; padding: 10px 14px; display: none; }
+  #status { top: 12px; transform: translateX(-50%); z-index: 30; }
+  #intro { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; display: none; z-index: 10; }
+  #skip { position: absolute; right: 24px; bottom: 24px; z-index: 11; display: none; }
+  #stats { position: absolute; top: 4px; left: 6px; font-size: 11px; color: #8f8; text-shadow: 0 0 2px #000; pointer-events: none; }
+  #log { position: absolute; bottom: 0; left: 0; right: 0; height: 30vh; margin: 0; overflow: auto; background: rgba(0,0,0,.85); color: #9c9; font: 11px "Geist Mono", ui-monospace, monospace; display: none; white-space: pre-wrap; }
+  body.showlog #log { display: block; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="screen"></canvas></div>
+<div id="stats"></div>
+<div id="status" class="mc2"></div>
+<div id="save-warning" role="alert"></div>
+<video id="intro" playsinline preload="auto"></video>
+<button id="skip">Skip</button>
+<div id="setup"><strong>Bring your game files</strong><span id="game-file-status">Checking saved game files…</span><a href="https://github.com/aryanbaburajan/modern-combat-2/blob/main/SETUP.md" target="_blank" rel="noopener noreferrer">Game files and multiplayer guide ↗</a><div id="game-files"><label>Game APK<input id="apk" type="file" accept=".apk,application/vnd.android.package-archive"></label><label>Game data ZIP<input id="data-zip" type="file" accept=".zip,application/zip"></label></div><button type="button" id="replace-files" hidden>Use different files</button><button id="start">Start Modern Combat 2</button></div>
+<pre id="log"></pre>
+<script>
+  if (new URLSearchParams(location.search).has("log")) document.body.classList.add("showlog");
+  addEventListener("keydown", (e) => { if (e.key === "`") document.body.classList.toggle("showlog"); });
+</script>
+<script type="module" src="main.js"></script>
+</body>
+</html>

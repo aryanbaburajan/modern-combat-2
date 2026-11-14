@@ -1,0 +1,18 @@
+# Game data is supplied by players, never packaged into Vercel source.
+web/game/
+modern-combat-2-black-pegasus-v-1.0.5.zip
+
+# Rebuilt by Vercel or only used for local development.
+dist/
+node_modules/
+engine/target/
+.wrangler/
+.vercel/
+.claude/
+
+# Original game archives and extracted source package must not be uploaded.
+*.apk
+*.zip
+modern-combat-2-black-pegasus-v-1.0.5*/
+
+reference/

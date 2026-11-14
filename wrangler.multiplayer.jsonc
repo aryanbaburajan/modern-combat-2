@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mc2-multiplayer",
+  "main": "cloudflare/multiplayer.js",
+  "compatibility_date": "2026-10-19",
+  "workers_dev": true,
+  "vars": { "ALLOWED_ORIGINS": "https://mc2.aryanbaburajan.com" },
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "observability": { "enabled": true, "redact_query_string": true, "logs": { "enabled": true, "head_sampling_rate": 1 }, "traces": { "enabled": true, "head_sampling_rate": 0.01 } }
+}
