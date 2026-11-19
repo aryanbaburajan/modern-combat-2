@@ -255,6 +255,11 @@ pub extern "C" fn mc2_frame(bg_budget: u32) -> i32 {
 }
 
 #[no_mangle]
+pub extern "C" fn mc2_keyboard_straight(enabled: u32) {
+    emu().keyboard_straight = enabled != 0;
+}
+
+#[no_mangle]
 pub extern "C" fn mc2_touch(action: u32, x: i32, y: i32, id: u32) -> i32 {
     match call_native("GameGLSurfaceView", "nativeOnTouch", &[action, x as u32, y as u32, id]) {
         Ok(_) => 0,
@@ -337,11 +342,11 @@ pub extern "C" fn mc2_hud_signature() -> f64 {
 }
 
 /// Game state bits for the input layer: bit 0 = cutscene playing,
-/// bit 1 = paused, bit 2 = aiming down the sights, bit 3 = loadout selection.
+/// bit 1 = paused, bit 2 = aiming down the sights, bit 3 = loadout selection, bit 4 = quick-time event.
 #[no_mangle]
 pub extern "C" fn mc2_game_state() -> u32 {
     let e = emu();
-    crate::game::in_cutscene(e) as u32 | (crate::game::is_paused(e) as u32) << 1 | (crate::game::in_iron_sight(e) as u32) << 2 | (crate::game::in_loadout(e) as u32) << 3
+    crate::game::in_cutscene(e) as u32 | (crate::game::is_paused(e) as u32) << 1 | (crate::game::in_iron_sight(e) as u32) << 2 | (crate::game::in_loadout(e) as u32) << 3 | (crate::game::in_qte(e) as u32) << 4
 }
 
 /// Set the HUD controls that should not be drawn (newline-separated names).

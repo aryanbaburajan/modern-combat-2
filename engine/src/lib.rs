@@ -40,6 +40,9 @@ pub struct Emu {
     /// Entry of HUDControl::Render; calls on controls named in `hidden_hud`
     /// return immediately (the control is not drawn but still accepts touches).
     pub render_pc: u32,
+    pub keyboard_straight: bool,
+    hud_move_return: u32,
+    character_move_pc: u32,
     pub hidden_hud: Vec<String>,
     pub text: game::TextPatcher,
     /// Debug: function entries to log (pc, symbol).
@@ -65,9 +68,14 @@ impl Emu {
         let mut hle = hle::State::new(&mut mem);
         let lib = loader::load_elf(&mut mem, lib_bytes, LIB_BASE, &mut |name, is_func| hle.resolve_import(name, is_func))?;
         let cache = BlockCache::new(lib.text_start, lib.text_end);
-        let mut emu = Emu { cpu: Cpu::new(), mem, cache, lib, hle, plat, icount: 0, trace: false, probes: Vec::new(), render_pc: 1, hidden_hud: Vec::new(), text: Default::default(), traced: Vec::new() };
+        let mut emu = Emu { cpu: Cpu::new(), mem, cache, lib, hle, plat, icount: 0, trace: false, probes: Vec::new(), render_pc: 1, keyboard_straight: false, hud_move_return: 0, character_move_pc: 1, hidden_hud: Vec::new(), text: Default::default(), traced: Vec::new() };
         emu.hle.init_threads(&mut emu.mem);
         game::install_probes(&mut emu);
+        // v1.0.5: this call passes the HUD's local movement vector on the stack.
+        if let Some(pc) = emu.lib.find_func("_ZN3Hud22UpdateMovementControlsEi") {
+            emu.hud_move_return = (pc + 0x17e) | 1;
+        }
+        emu.character_move_pc = emu.lib.find_func("_ZN9Character4MoveERKN6glitch4core8vector3dIfEE").unwrap_or(1);
         Ok(emu)
     }
 
@@ -147,6 +155,10 @@ impl Emu {
                     return Stop::Budget;
                 }
                 continue;
+            }
+            if pc == self.character_move_pc && self.keyboard_straight && self.cpu.r[14] == self.hud_move_return {
+                // W/S has no lateral component. Keep the game-computed forward speed.
+                self.mem.w32(self.cpu.r[1], 0);
             }
             for p in self.probes.iter_mut() {
                 if p.pc == pc {

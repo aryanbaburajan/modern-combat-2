@@ -81,6 +81,8 @@ export class Controls {
     this.onHint = onHint || (() => {});
     this.layout = new Map();
     this.inCutscene = false;
+    this.inQte = false;
+    this.qteUnlockPending = false;
     this.paused = false;
     this.loadout = false;
     this.cameraSeenAt = -1e9;
@@ -109,7 +111,7 @@ export class Controls {
   // area recently (it briefly disappears while the HUD is rebuilt, e.g.
   // right after a cutscene, which must not drop or block mouse capture).
   get gameplay() {
-    return !this.inCutscene && !this.paused && !this.loadout && (this.layout.has("Thumbstick_camera") || (this.locked && performance.now() - this.cameraSeenAt < 1500));
+    return !this.inQte && !this.inCutscene && !this.paused && !this.loadout && (this.layout.has("Thumbstick_camera") || (this.locked && performance.now() - this.cameraSeenAt < 1500));
   }
   get cutscene() {
     return this.inCutscene;
@@ -120,7 +122,8 @@ export class Controls {
     const wasMenu = this.paused || this.loadout;
     const isMenu = !!(st.paused || st.loadout);
     const leavingCutscene = this.inCutscene && !st.cutscene;
-    if (!wasPlaying && !st.cutscene && !st.paused) this.releasePassthrough();
+    if ((this.inQte && !st.qte) || (!wasPlaying && !st.qte && !st.cutscene && !st.paused)) this.releasePassthrough();
+    this.inQte = !!st.qte;
     this.inCutscene = !!st.cutscene;
     this.paused = !!st.paused;
     this.loadout = !!st.loadout;
@@ -137,9 +140,16 @@ export class Controls {
   leaveIfNotPlaying() {
     if (!this.gameplay) {
       // Keep capture through in-mission cutscenes, but release it for menus.
-      if (this.locked && !this.forceLock && (!this.inCutscene || this.paused || this.loadout)) document.exitPointerLock();
+      if (this.inQte) this.unlockForQte();
+      else if (this.locked && !this.forceLock && (!this.inCutscene || this.paused || this.loadout)) document.exitPointerLock();
       this.releaseAll();
     }
+  }
+
+  unlockForQte() {
+    if (document.pointerLockElement !== this.canvas || this.qteUnlockPending) return;
+    this.qteUnlockPending = true;
+    document.exitPointerLock();
   }
 
   requestLock(why) {
@@ -201,12 +211,12 @@ export class Controls {
     F.y = y;
     this.send(1, Math.round(x), Math.round(y), f);
   }
-  moveTo(f, x, y) {
+  moveTo(f, x, y, straight = false) {
     const F = this.fingers[f];
     if (!F.down) return;
     F.x = Math.max(0, Math.min(this.W - 1, x));
     F.y = Math.max(0, Math.min(this.H - 1, y));
-    this.send(2, Math.round(F.x), Math.round(F.y), f);
+    this.send(2, Math.round(F.x), Math.round(F.y), f, straight);
   }
   release(f) {
     const F = this.fingers[f];
@@ -274,7 +284,7 @@ export class Controls {
       // Hold Alt to walk slowly (half stick deflection), as the game's
       // stealth hints suggest.
       const scale = (this.keys.has("AltLeft") || this.keys.has("AltRight") ? 0.45 : 1) * radius / len;
-      this.moveTo(MOVE, cx + dx * scale, cy + dy * scale);
+      this.moveTo(MOVE, cx + dx * scale, cy + dy * scale, dx === 0);
     } else if (this.fingers[MOVE].owner === "move") {
       this.release(MOVE);
     }
@@ -482,12 +492,17 @@ export class Controls {
       this.updateHint();
     });
     document.addEventListener("pointerlockchange", () => {
-      if (this.locked) this.releasePassthrough();
+      if (this.locked) {
+        this.releasePassthrough();
+        if (this.inQte) this.unlockForQte();
+      }
       if (!this.locked) {
         // Leaving mouse capture (Esc) pauses the game, like the pause button.
+        const qteUnlock = this.qteUnlockPending;
+        this.qteUnlockPending = false;
         const wasPlaying = this.fingers.some((f) => f.down) || this.gameplay;
         this.releaseAll();
-        if (wasPlaying && this.gameplay) {
+        if (!qteUnlock && wasPlaying && this.gameplay) {
           const p = this.layout.get("PauseButton");
           if (p) { this.send(1, p.cx, p.cy, RIGHT); setTimeout(() => this.send(0, p.cx, p.cy, RIGHT), 80); }
         }
@@ -496,7 +511,7 @@ export class Controls {
     });
 
     addEventListener("keydown", (e) => {
-      if (this.cutscene && (e.code === "Space" || e.code === "Enter") && !e.repeat) {
+      if (this.cutscene && !this.inQte && (e.code === "Space" || e.code === "Enter") && !e.repeat) {
         const [x, y] = [SKIP_POINT[0] * this.W / 800, SKIP_POINT[1] * this.H / 480];
         this.send(1, x, y, RIGHT);
         setTimeout(() => this.send(0, x, y, RIGHT), 150);

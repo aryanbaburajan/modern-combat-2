@@ -181,6 +181,14 @@ fn valid_hud(emu: &Emu) -> Option<u32> {
     }
 }
 
+/// The QTE target is activated by both Hud::StartQTE overloads and
+/// deactivated by Hud::EndQTE. Read it directly since it can move each frame.
+pub fn in_qte(emu: &Emu) -> bool {
+    let Some(hud) = valid_hud(emu) else { return false; };
+    let target = emu.mem.r32(hud + 0x624);
+    emu.hle.heap.contains(target) && emu.mem.r8(target + 0x60) != 0
+}
+
 /// Hit-test a grid over the screen with the game's own touch collision and
 /// return the bounding box of every control that answered.
 pub fn hud_scan(emu: &mut Emu, w: u32, h: u32, step: u32) -> Vec<HudRect> {

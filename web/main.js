@@ -226,9 +226,9 @@ const controls = new Controls({
   W,
   H,
   locate: hudLocate,
-  sendTouch: (action, x, y, id) => {
+  sendTouch: (action, x, y, id, straight = false) => {
     ensureAudio();
-    worker.postMessage({ type: "touch", action, x, y, id });
+    worker.postMessage({ type: "touch", action, x, y, id, straight });
   },
   // No on-page hints: controls are explained in the game's own text.
   onHint: () => {},

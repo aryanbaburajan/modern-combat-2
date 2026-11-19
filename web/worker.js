@@ -415,7 +415,7 @@ function trackHud() {
     // Re-send the HUD after pause/cutscene transitions even if its geometry is unchanged.
     hudSentSig = -1;
     gameState = st;
-    postMessage({ type: "gamestate", cutscene: !!(st & 1), paused: !!(st & 2), ads: !!(st & 4), loadout: !!(st & 8) });
+    postMessage({ type: "gamestate", cutscene: !!(st & 1), paused: !!(st & 2), ads: !!(st & 4), loadout: !!(st & 8), qte: !!(st & 16) });
   }
   const sig = exp.mc2_hud_signature();
   if (sig !== hudSig) {
@@ -437,7 +437,10 @@ function frame() {
   if (!running) return;
   try {
     for (const ev of queue.splice(0)) {
-      if (ev.kind === "touch") check(exp.mc2_touch(ev.action, ev.x, ev.y, ev.id), "touch");
+      if (ev.kind === "touch") {
+        if (ev.id === 0) exp.mc2_keyboard_straight(ev.straight ? 1 : 0);
+        check(exp.mc2_touch(ev.action, ev.x, ev.y, ev.id), "touch");
+      }
       else if (ev.kind === "key") check(exp.mc2_key(ev.down, ev.code), "key");
       else if (ev.kind === "pause") check(exp.mc2_pause(ev.paused), "pause");
       else if (ev.kind === "hidehud" || ev.kind === "textrules") applyConfig(ev);
